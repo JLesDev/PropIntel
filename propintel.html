@@ -100,6 +100,21 @@ html,body { height:100%; font-family:'DM Sans',sans-serif; background:var(--crea
 .bar-val{font-size:11px;font-weight:500;color:var(--ink-muted);width:32px;text-align:right;flex-shrink:0;}
 .detail-tags{display:flex;flex-wrap:wrap;gap:6px;}
 .detail-tag{font-size:11px;padding:4px 10px;border-radius:20px;background:#fff;border:1px solid var(--border);color:var(--ink-soft);}
+#facility-panel{position:absolute;top:16px;right:16px;z-index:400;background:rgba(245,241,235,.97);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow);min-width:180px;display:none;}
+#facility-panel.visible{display:block;}
+.fp-title{font-size:9.5px;font-weight:600;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-muted);margin-bottom:10px;}
+.fp-group{margin-bottom:10px;}
+.fp-group-label{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted);margin-bottom:5px;}
+.fp-toggle{display:flex;align-items:center;gap:7px;margin-bottom:4px;cursor:pointer;user-select:none;}
+.fp-toggle input[type=checkbox]{width:13px;height:13px;accent-color:var(--ink);cursor:pointer;}
+.fp-toggle label{font-size:11.5px;color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;gap:5px;}
+.fp-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block;}
+.fp-loading{font-size:10.5px;color:var(--ink-muted);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);}
+#zone-legend{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:none;}
+#zone-legend.visible{display:block;}
+.zl-item{display:flex;align-items:center;gap:6px;margin-bottom:3px;}
+.zl-swatch{width:11px;height:11px;border-radius:2px;flex-shrink:0;}
+.zl-text{font-size:10.5px;color:var(--ink-soft);}
 #legend{position:absolute;bottom:20px;left:20px;z-index:400;background:rgba(245,241,235,.95);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow);}
 .legend-title{font-size:9.5px;font-weight:600;letter-spacing:.10em;text-transform:uppercase;color:var(--ink-muted);margin-bottom:10px;}
 .legend-item{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
@@ -248,6 +263,7 @@ html,body { height:100%; font-family:'DM Sans',sans-serif; background:var(--crea
     <div id="view-toggle">
       <div class="vtog active" data-view="suburbs">Suburbs</div>
       <div class="vtog" data-view="councils">Councils</div>
+      <div class="vtog" data-view="facilities">Facilities</div>
     </div>
     <span id="suburb-count-badge">Loading…</span>
     <div id="loading-status">
@@ -270,6 +286,27 @@ html,body { height:100%; font-family:'DM Sans',sans-serif; background:var(--crea
       <div class="legend-item"><div class="legend-swatch" style="background:#8A3820"></div><span class="legend-text">D — Weak</span></div>
       <div class="legend-item"><div class="legend-swatch" style="background:#5C1A1A"></div><span class="legend-text">E — Avoid</span></div>
     </div>
+
+    <!-- Facility View Control Panel -->
+    <div id="facility-panel">
+      <div class="fp-title">Facility Layers</div>
+      <div class="fp-group">
+        <div class="fp-group-label">Transport</div>
+        <div class="fp-toggle"><input type="checkbox" id="fl-train" checked><label for="fl-train"><span class="fp-dot" style="background:#1a56a0"></span>Train Stations</label></div>
+      </div>
+      <div class="fp-group">
+        <div class="fp-group-label">Education</div>
+        <div class="fp-toggle"><input type="checkbox" id="fl-school" checked><label for="fl-school"><span class="fp-dot" style="background:#E67E22"></span>Schools</label></div>
+        <div class="fp-toggle"><input type="checkbox" id="fl-university"><label for="fl-university"><span class="fp-dot" style="background:#D35400"></span>Universities</label></div>
+      </div>
+      <div class="fp-group">
+        <div class="fp-group-label">Health</div>
+        <div class="fp-toggle"><input type="checkbox" id="fl-hospital" checked><label for="fl-hospital"><span class="fp-dot" style="background:#C0392B"></span>Hospitals</label></div>
+      </div>
+      <div class="fp-loading" id="fp-status">Ready</div>
+
+    </div>
+
   </div>
   <div id="sidebar">
     <div id="search-wrap">
@@ -638,7 +675,7 @@ Object.keys(SD).forEach(name=>{
 });
 
 let allSuburbs = [], activeFilter="ALL", activeItem=null, currentView="suburbs";
-let map, suburbLayer, councilLayer;
+let map, suburbLayer, councilLayer, facilityLayer, zoneLayer;
 
 
 function g(id)          { return document.getElementById(id); }
@@ -787,14 +824,28 @@ document.querySelectorAll(".vtog").forEach(btn => {
     document.querySelectorAll(".vtog").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
     currentView = btn.dataset.view;
+    const fp = g("facility-panel");
     if(currentView==="councils") {
       suburbLayer.remove();
+      if(facilityLayer) facilityLayer.remove();
+      if(zoneLayer) zoneLayer.remove();
       if(councilLayer) councilLayer.addTo(map);
+      if(fp) fp.classList.remove("visible");
       ["suburb-list","search-wrap"].forEach(id=>{const e=g(id);if(e)e.style.opacity=".3";});
       const fw=g("filter-wrap"); if(fw) fw.style.pointerEvents="none";
-    } else {
+    } else if(currentView==="facilities") {
       if(councilLayer) councilLayer.remove();
       suburbLayer.addTo(map);
+      if(fp) fp.classList.add("visible");
+      ["suburb-list","search-wrap"].forEach(id=>{const e=g(id);if(e)e.style.opacity="1";});
+      const fw=g("filter-wrap"); if(fw) fw.style.pointerEvents="auto";
+      initFacilityView();
+    } else {
+      if(councilLayer) councilLayer.remove();
+      if(facilityLayer) facilityLayer.remove();
+      if(zoneLayer) zoneLayer.remove();
+      suburbLayer.addTo(map);
+      if(fp) fp.classList.remove("visible");
       ["suburb-list","search-wrap"].forEach(id=>{const e=g(id);if(e)e.style.opacity="1";});
       const fw=g("filter-wrap"); if(fw) fw.style.pointerEvents="auto";
     }
@@ -1684,6 +1735,78 @@ function addTagToCurrentSuburb(tagName){
   if(!tag) return;
   if(!tag.suburbs.includes(currentDetailSuburb)) tag.suburbs.push(currentDetailSuburb);
   saveTags();
+}
+
+
+
+let facilityDataLoaded = false;
+let facilityLayerGroups = {};
+let zoneLayerVisible = false;
+
+const FACILITY_CONFIG = {
+  train:      { color:"#1a56a0", border:"#0d3d7a", icon:"🚂", label:"Train Station",   radius:8,  weight:2 },
+  school:     { color:"#E67E22", border:"#b05a0e", icon:"🏫", label:"School",           radius:7,  weight:2 },
+  university: { color:"#D35400", border:"#9a3c00", icon:"🎓", label:"University/TAFE",  radius:9,  weight:2 },
+  hospital:   { color:"#C0392B", border:"#8e1c14", icon:"🏥", label:"Hospital",         radius:9,  weight:2 },
+};
+
+function setFpStatus(msg) {
+  const el = g("fp-status");
+  if(el) el.textContent = msg;
+}
+
+function makeCircleMarker(lat, lon, type, name) {
+  const cfg = FACILITY_CONFIG[type];
+  const m = L.circleMarker([lat,lon], {
+    radius: cfg.radius, color: cfg.border, weight: cfg.weight,
+    fillColor: cfg.color, fillOpacity: 0.85
+  });
+  const tip = name ? `<b>${name}</b><br><span style="font-size:10px;color:#aaa">${cfg.label}</span>` : cfg.label;
+  m.bindTooltip(tip, {direction:"top", offset:[0,-4]});
+  return m;
+}
+
+const STATIC_FACILITIES = {
+  train:      [{"n": "Flinders Street", "a": -37.8183, "o": 144.9671}, {"n": "Southern Cross", "a": -37.8183, "o": 144.9523}, {"n": "Melbourne Central", "a": -37.81, "o": 144.9627}, {"n": "Flagstaff", "a": -37.8113, "o": 144.9565}, {"n": "Parliament", "a": -37.8116, "o": 144.973}, {"n": "Richmond", "a": -37.8246, "o": 144.998}, {"n": "South Yarra", "a": -37.8393, "o": 144.9931}, {"n": "Caulfield", "a": -37.877, "o": 145.0233}, {"n": "Oakleigh", "a": -37.8997, "o": 145.0869}, {"n": "Clayton", "a": -37.9213, "o": 145.1218}, {"n": "Dandenong", "a": -37.9873, "o": 145.2165}, {"n": "Cranbourne", "a": -38.1097, "o": 145.2826}, {"n": "Pakenham", "a": -38.0703, "o": 145.4872}, {"n": "Berwick", "a": -38.0343, "o": 145.3467}, {"n": "Narre Warren", "a": -38.0218, "o": 145.299}, {"n": "Hallam", "a": -37.9929, "o": 145.267}, {"n": "Springvale", "a": -37.949, "o": 145.1518}, {"n": "Noble Park", "a": -37.9658, "o": 145.1664}, {"n": "Sandown Park", "a": -37.9344, "o": 145.1467}, {"n": "Cheltenham", "a": -37.9546, "o": 145.0583}, {"n": "Mentone", "a": -37.9826, "o": 145.0614}, {"n": "Frankston", "a": -38.1445, "o": 145.1256}, {"n": "Seaford", "a": -38.1052, "o": 145.1731}, {"n": "Carrum", "a": -38.0728, "o": 145.1224}, {"n": "Mordialloc", "a": -37.9991, "o": 145.0866}, {"n": "Highett", "a": -37.9491, "o": 145.0523}, {"n": "Ormond", "a": -37.9059, "o": 145.0436}, {"n": "McKinnon", "a": -37.9106, "o": 145.0479}, {"n": "Bentleigh", "a": -37.9197, "o": 145.0316}, {"n": "Patterson", "a": -37.9298, "o": 145.0275}, {"n": "Moorabbin", "a": -37.9388, "o": 145.036}, {"n": "Glen Huntly", "a": -37.8898, "o": 145.0523}, {"n": "Carnegie", "a": -37.8885, "o": 145.052}, {"n": "Murrumbeena", "a": -37.8943, "o": 145.0622}, {"n": "Hughesdale", "a": -37.8985, "o": 145.0743}, {"n": "Holmesglen", "a": -37.8871, "o": 145.0899}, {"n": "East Malvern", "a": -37.8726, "o": 145.0693}, {"n": "Jordanville", "a": -37.881, "o": 145.1036}, {"n": "Mount Waverley", "a": -37.8769, "o": 145.1345}, {"n": "Glen Waverley", "a": -37.8788, "o": 145.1636}, {"n": "Syndal", "a": -37.8757, "o": 145.1479}, {"n": "Nunawading", "a": -37.8272, "o": 145.1742}, {"n": "Mitcham", "a": -37.8139, "o": 145.1996}, {"n": "Ringwood", "a": -37.8137, "o": 145.229}, {"n": "Ringwood East", "a": -37.8224, "o": 145.2468}, {"n": "Croydon", "a": -37.7988, "o": 145.2813}, {"n": "Mooroolbark", "a": -37.7778, "o": 145.3044}, {"n": "Lilydale", "a": -37.7571, "o": 145.3536}, {"n": "Bayswater", "a": -37.8447, "o": 145.2631}, {"n": "Boronia", "a": -37.8546, "o": 145.2895}, {"n": "Ferntree Gully", "a": -37.8802, "o": 145.2937}, {"n": "Upper Ferntree Gully", "a": -37.8904, "o": 145.3108}, {"n": "Tecoma", "a": -37.9038, "o": 145.3268}, {"n": "Belgrave", "a": -37.9139, "o": 145.3558}, {"n": "Blackburn", "a": -37.8198, "o": 145.1527}, {"n": "Box Hill", "a": -37.8193, "o": 145.1218}, {"n": "Laburnum", "a": -37.821, "o": 145.1374}, {"n": "Chatham", "a": -37.8197, "o": 145.1455}, {"n": "Surrey Hills", "a": -37.8242, "o": 145.1035}, {"n": "Mont Albert", "a": -37.8234, "o": 145.1125}, {"n": "Camberwell", "a": -37.8317, "o": 145.0592}, {"n": "Auburn", "a": -37.8261, "o": 145.0448}, {"n": "Glenferrie", "a": -37.8232, "o": 145.0363}, {"n": "Hawthorn", "a": -37.8214, "o": 145.0292}, {"n": "Burnley", "a": -37.8281, "o": 145.0022}, {"n": "East Richmond", "a": -37.8245, "o": 144.9985}, {"n": "West Richmond", "a": -37.8157, "o": 144.9891}, {"n": "Collingwood", "a": -37.8041, "o": 144.9919}, {"n": "North Richmond", "a": -37.8004, "o": 144.9916}, {"n": "Jolimont", "a": -37.8161, "o": 144.9781}, {"n": "Clifton Hill", "a": -37.7905, "o": 144.9977}, {"n": "Westgarth", "a": -37.7933, "o": 144.9936}, {"n": "Dennis", "a": -37.7952, "o": 145.005}, {"n": "Alphington", "a": -37.787, "o": 145.0176}, {"n": "Fairfield", "a": -37.7846, "o": 145.025}, {"n": "Ivanhoe", "a": -37.7693, "o": 145.045}, {"n": "Eaglemont", "a": -37.7621, "o": 145.0582}, {"n": "Heidelberg", "a": -37.756, "o": 145.0606}, {"n": "Rosanna", "a": -37.7453, "o": 145.0641}, {"n": "Macleod", "a": -37.7266, "o": 145.0684}, {"n": "Watsonia", "a": -37.7135, "o": 145.0826}, {"n": "Greensborough", "a": -37.7039, "o": 145.1019}, {"n": "Montmorency", "a": -37.7149, "o": 145.1215}, {"n": "Diamond Creek", "a": -37.6714, "o": 145.1568}, {"n": "Eltham", "a": -37.7137, "o": 145.1465}, {"n": "Hurstbridge", "a": -37.6368, "o": 145.1938}, {"n": "South Morang", "a": -37.6617, "o": 145.0615}, {"n": "Mernda", "a": -37.6009, "o": 145.0834}, {"n": "Epping", "a": -37.6456, "o": 145.0198}, {"n": "South Kensington", "a": -37.7988, "o": 144.928}, {"n": "Footscray", "a": -37.8011, "o": 144.9003}, {"n": "Tottenham", "a": -37.8097, "o": 144.8717}, {"n": "Sunshine", "a": -37.7875, "o": 144.8266}, {"n": "Albion", "a": -37.7753, "o": 144.8089}, {"n": "Ginifer", "a": -37.7717, "o": 144.7949}, {"n": "St Albans", "a": -37.7461, "o": 144.7984}, {"n": "Watergardens", "a": -37.7023, "o": 144.7604}, {"n": "Sydenham", "a": -37.678, "o": 144.7463}, {"n": "Sunbury", "a": -37.5778, "o": 144.7266}, {"n": "Craigieburn", "a": -37.5999, "o": 144.9447}, {"n": "Roxburgh Park", "a": -37.6398, "o": 144.9322}, {"n": "Broadmeadows", "a": -37.6793, "o": 144.9187}, {"n": "Jacana", "a": -37.7192, "o": 144.9}, {"n": "Glenroy", "a": -37.7037, "o": 144.9209}, {"n": "Oak Park", "a": -37.7202, "o": 144.9296}, {"n": "Pascoe Vale", "a": -37.7245, "o": 144.943}, {"n": "Coburg", "a": -37.7447, "o": 144.9632}, {"n": "Moreland", "a": -37.7538, "o": 144.9644}, {"n": "Brunswick", "a": -37.7702, "o": 144.9626}, {"n": "Jewell", "a": -37.7733, "o": 144.9606}, {"n": "Royal Park", "a": -37.7841, "o": 144.9559}, {"n": "Thornbury", "a": -37.7566, "o": 145.0048}, {"n": "Northcote", "a": -37.7697, "o": 145.0073}, {"n": "Croxton", "a": -37.7624, "o": 145.0063}, {"n": "Reservoir", "a": -37.7183, "o": 145.0102}, {"n": "Lalor", "a": -37.6675, "o": 145.0076}, {"n": "Thomastown", "a": -37.7296, "o": 145.0145}, {"n": "Keon Park", "a": -37.7126, "o": 145.0085}, {"n": "Ruthven", "a": -37.7046, "o": 145.0107}, {"n": "Wollert", "a": -37.5999, "o": 145.0352}, {"n": "Upfield", "a": -37.6741, "o": 144.9525}, {"n": "Coolaroo", "a": -37.6567, "o": 144.928}, {"n": "Werribee", "a": -37.8997, "o": 144.6567}, {"n": "Hoppers Crossing", "a": -37.8838, "o": 144.6975}, {"n": "Laverton", "a": -37.8628, "o": 144.7771}, {"n": "Williams Landing", "a": -37.8567, "o": 144.744}, {"n": "Aircraft", "a": -37.8626, "o": 144.7645}, {"n": "Altona", "a": -37.868, "o": 144.8299}, {"n": "Seaholme", "a": -37.8644, "o": 144.8455}, {"n": "Newport", "a": -37.8455, "o": 144.8877}, {"n": "Williamstown", "a": -37.8645, "o": 144.8979}, {"n": "Williamstown North", "a": -37.854, "o": 144.8857}, {"n": "North Williamstown", "a": -37.8487, "o": 144.8919}, {"n": "Yarraville", "a": -37.8164, "o": 144.8891}, {"n": "Spotswood", "a": -37.828, "o": 144.8841}, {"n": "Point Cook", "a": -37.8989, "o": 144.752}, {"n": "Tarneit", "a": -37.8421, "o": 144.6879}, {"n": "Wyndham Vale", "a": -37.893, "o": 144.6207}],
+  hospital:   [{"n": "Royal Melbourne Hospital", "a": -37.7987, "o": 144.956}, {"n": "St Vincent's Hospital", "a": -37.8047, "o": 144.9792}, {"n": "Alfred Hospital", "a": -37.8459, "o": 144.9825}, {"n": "Monash Medical Centre", "a": -37.9284, "o": 145.1194}, {"n": "Dandenong Hospital", "a": -37.9903, "o": 145.2177}, {"n": "Box Hill Hospital", "a": -37.8193, "o": 145.1233}, {"n": "Austin Health", "a": -37.7565, "o": 145.06}, {"n": "Northern Hospital", "a": -37.6419, "o": 145.0154}, {"n": "Sunshine Hospital", "a": -37.7961, "o": 144.8284}, {"n": "Footscray Hospital", "a": -37.8011, "o": 144.9003}, {"n": "Frankston Hospital", "a": -38.1423, "o": 145.1264}, {"n": "Peninsula Private Hospital", "a": -38.1554, "o": 145.1337}, {"n": "Cabrini Hospital Malvern", "a": -37.8617, "o": 145.035}, {"n": "Epworth Richmond", "a": -37.8261, "o": 144.9967}, {"n": "Epworth Hawthorn", "a": -37.8228, "o": 145.033}, {"n": "Mercy Hospital for Women", "a": -37.7567, "o": 145.0579}, {"n": "Royal Children's Hospital", "a": -37.7967, "o": 144.9524}, {"n": "Royal Women's Hospital", "a": -37.7988, "o": 144.9548}, {"n": "Peter MacCallum Cancer Centre", "a": -37.8077, "o": 144.9535}, {"n": "Casey Hospital", "a": -38.0488, "o": 145.3051}, {"n": "Knox Private Hospital", "a": -37.8768, "o": 145.2436}, {"n": "Warringal Private Hospital", "a": -37.7586, "o": 145.059}, {"n": "Maroondah Hospital", "a": -37.8139, "o": 145.229}, {"n": "Werribee Mercy Hospital", "a": -37.9047, "o": 144.6607}, {"n": "Cranbourne Medical Centre", "a": -38.1093, "o": 145.2835}],
+  school:     [{"n": "Melbourne Grammar School", "a": -37.836, "o": 144.9691}, {"n": "Wesley College", "a": -37.8446, "o": 144.9881}, {"n": "Scotch College", "a": -37.8594, "o": 145.0353}, {"n": "Melbourne Girls Grammar", "a": -37.8411, "o": 144.9697}, {"n": "Mac.Robertson Girls High", "a": -37.8099, "o": 144.9621}, {"n": "Melbourne High School", "a": -37.8285, "o": 144.9657}, {"n": "University High School", "a": -37.7908, "o": 144.9561}, {"n": "Camberwell Grammar", "a": -37.8218, "o": 145.0711}, {"n": "Brighton Grammar", "a": -37.9157, "o": 144.9953}, {"n": "St Kevin's College", "a": -37.8107, "o": 145.0367}, {"n": "Xavier College", "a": -37.8053, "o": 145.0369}, {"n": "Haileybury College", "a": -38.0037, "o": 145.1784}, {"n": "Carey Baptist Grammar", "a": -37.8083, "o": 145.0613}, {"n": "Kew High School", "a": -37.8055, "o": 145.0396}, {"n": "Balwyn High School", "a": -37.8127, "o": 145.0929}, {"n": "Box Hill High School", "a": -37.8193, "o": 145.1218}, {"n": "Doncaster Secondary", "a": -37.7894, "o": 145.1245}, {"n": "Templestowe College", "a": -37.7498, "o": 145.1453}, {"n": "Glen Waverley Secondary", "a": -37.8788, "o": 145.1636}, {"n": "Mount Waverley Secondary", "a": -37.8769, "o": 145.1345}, {"n": "Caulfield Grammar Malvern", "a": -37.8589, "o": 145.0345}, {"n": "Shelford Girls Grammar", "a": -37.877, "o": 145.0233}, {"n": "Mentone Grammar", "a": -37.9804, "o": 145.066}, {"n": "Beaconhills College Berwick", "a": -38.0323, "o": 145.3508}, {"n": "Mazenod College", "a": -37.9064, "o": 145.0866}, {"n": "Nossal High School", "a": -38.0341, "o": 145.2647}, {"n": "Padua College", "a": -37.7459, "o": 145.0007}, {"n": "La Trobe Secondary", "a": -37.7054, "o": 145.0564}, {"n": "Greensborough College", "a": -37.7046, "o": 145.1003}, {"n": "Epping Secondary", "a": -37.6462, "o": 145.0188}, {"n": "Craigieburn Secondary", "a": -37.5994, "o": 144.9436}, {"n": "Sunshine College", "a": -37.7852, "o": 144.829}, {"n": "Footscray City College", "a": -37.8008, "o": 144.8993}, {"n": "Williamstown High School", "a": -37.8666, "o": 144.897}, {"n": "Point Cook Senior Secondary", "a": -37.8992, "o": 144.7519}, {"n": "Werribee Secondary", "a": -37.8991, "o": 144.6572}, {"n": "Frankston High School", "a": -38.1448, "o": 145.1261}, {"n": "Chisholm TAFE Frankston", "a": -38.1448, "o": 145.1261}, {"n": "Sandringham College", "a": -37.9509, "o": 145.002}, {"n": "Hampton Park Secondary", "a": -38.0416, "o": 145.2613}],
+  university: [{"n": "University of Melbourne", "a": -37.7963, "o": 144.9614}, {"n": "RMIT University City", "a": -37.8083, "o": 144.9629}, {"n": "Monash University Clayton", "a": -37.9122, "o": 145.1326}, {"n": "La Trobe University Bundoora", "a": -37.7205, "o": 145.0469}, {"n": "Swinburne University Hawthorn", "a": -37.8228, "o": 145.033}, {"n": "Deakin University Burwood", "a": -37.8452, "o": 145.1164}, {"n": "Victoria University Footscray", "a": -37.8008, "o": 144.8993}, {"n": "Australian Catholic University", "a": -37.8053, "o": 145.0369}, {"n": "Monash University Caulfield", "a": -37.877, "o": 145.0233}, {"n": "RMIT Brunswick", "a": -37.7702, "o": 144.9626}, {"n": "Swinburne Wantirna", "a": -37.855, "o": 145.231}, {"n": "Deakin University Waterfront", "a": -37.8452, "o": 144.9358}, {"n": "Box Hill TAFE", "a": -37.8193, "o": 145.1218}, {"n": "Holmesglen TAFE Chadstone", "a": -37.8871, "o": 145.0899}, {"n": "Chisholm TAFE Dandenong", "a": -37.9877, "o": 145.2151}, {"n": "William Angliss Institute", "a": -37.8136, "o": 144.9631}, {"n": "GOTAFE Epping", "a": -37.6462, "o": 145.0188}],
+};
+
+function initFacilityView() {
+  if(facilityLayer) { facilityLayer.addTo(map); syncFacilityCheckboxes(); return; }
+  facilityLayer = L.layerGroup().addTo(map);
+  facilityLayerGroups = {};
+  Object.keys(FACILITY_CONFIG).forEach(type => { facilityLayerGroups[type] = L.layerGroup(); });
+
+  Object.entries(STATIC_FACILITIES).forEach(([type, items]) => {
+    const grp = facilityLayerGroups[type];
+    items.forEach(item => makeCircleMarker(item.a, item.o, type, item.n).addTo(grp));
+    const cb = g("fl-"+type);
+    if(cb && cb.checked) grp.addTo(facilityLayer);
+  });
+
+
+
+
+
+  syncFacilityCheckboxes();
+  setFpStatus(Object.values(STATIC_FACILITIES).reduce((s,a)=>s+a.length,0)+" facilities loaded");
+}
+
+function syncFacilityCheckboxes() {
+  Object.keys(FACILITY_CONFIG).forEach(type => {
+    const cb = g("fl-"+type);
+    const grp = facilityLayerGroups[type];
+    if(!cb||!grp) return;
+    cb.onchange = () => {
+      if(cb.checked) grp.addTo(facilityLayer);
+      else grp.remove();
+    };
+    if(!cb.checked && facilityLayer) grp.remove();
+    else if(cb.checked && facilityLayer) grp.addTo(facilityLayer);
+  });
+
 }
 
 
